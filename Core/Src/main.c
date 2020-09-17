@@ -16,13 +16,29 @@
   *
   ******************************************************************************
   */
+/* CH_PLOT allows user to inspect sample buffer for a given channel using SWV
+ * to enable sample buffer inspection CH_PLOT must be defined
+ * CH_PLOT also works as channel selection (0, 1 or 2)
+ * CH_PLOT_STEP represents how many samples to skip between iterations
+ * CH_WAIT_TIMER is how many cycles to wait before re-enabling sampling timer
+ * CH_WAIT_UPDATE is how many cycles to wait before updating ch_plot. If the update is too fast, SWV can't keep up.
+ *
+ * user can monitor ch_plot for the sample buffer value and iCH for the index of the current value
+ *
+ **/
+//#define CH_PLOT 0 // comment line to disable buffer inspection
+#define CH_PLOT_STEP 20
+#define CH_WAIT_TIMER 1000
+#define CH_WAIT_UPDATE 10000
+
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+static uint16_t ch_plot = 0;
+static unsigned int iCH = 0;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -94,7 +110,15 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-  for (unsigned int i = 0; i < ADC_BUFFER_SIZE; ++i) { ADC_buffer[i] = 0; }
+  // Limpa buffer
+  	  for (unsigned int i = 0; i < ADC_BUFFER_SIZE; ++i) { ADC_buffer[i] = 0; }
+  // Liga prefetch quando disponivel
+  	  /* STM32F405x/407x/415x/417x Revision Z devices: prefetch is supported  */
+  	  if (HAL_GetREVID() == 0x1001)
+  	  {
+  	    /* Enable the Flash prefetch */
+  	    __HAL_FLASH_PREFETCH_BUFFER_ENABLE();
+  	  }
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -117,20 +141,13 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  /**
-		for (int j = 0; j < 1000; ++j) {
-			for (int k = 0; k < 1000; ++k) {}
-		}
-		for (int i = 0; i < ADC_BUFFER_SIZE; ++i) {
-			printf("b[%d] = %d | ",i, ADC_buffer[i]);
-		}
-		printf("\n---------------------------------\n");
-		/**/
+
   }
   /* USER CODE END 3 */
 }
@@ -345,6 +362,20 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	HAL_GPIO_TogglePin(GPIOD, LED_B_Pin);
+#ifdef CH_PLOT
+	// Pause the sampling timer
+		if (HAL_TIM_Base_Stop(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 0); }
+	// Loop through sample buffer loading values into ch_plot
+    // User can inspect sample buffer by looking at ch_plot in SWV
+	  for (iCH = CH_PLOT; iCH < ADC_BUFFER_SIZE;) {
+		  ch_plot = ADC_buffer[iCH];
+		  iCH += 3*CH_PLOT_STEP;
+		  for (int i = 0; i < CH_WAIT_UPDATE; ++i){}
+	  }
+	  for (int i = 0; i < CH_WAIT_TIMER; ++i){}
+  	  // Restart sampling timer
+  	   	  if (HAL_TIM_Base_Start(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 0); }
+#endif // CH_PLOT
 }
 /* USER CODE END 4 */
 
