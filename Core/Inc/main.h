@@ -67,7 +67,11 @@ void Error_Handler(void);
 #define LED_B_Pin GPIO_PIN_15
 #define LED_B_GPIO_Port GPIOD
 /* USER CODE BEGIN Private defines */
-
+/** ADC Buffer Size
+ * Size in 16 bit sized samples. Therefore buffer size = 2 --> 32 bits = 4 bytes
+* 30720 samples = (*2) 61440 bytes and = (/3) 10240 samples per channel = (/40 kHz) 0,256 s recording (0,256s at 340 m/s = 87 m)
+* 46080 samples = (*2) 92160 bytes and = (/3) 15360 samples per channel = (/40 kHz) 0,384 s recording (0,256s at 340 m/s = 130 m) **/
+#define ADC_BUFFER_SIZE	60000
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

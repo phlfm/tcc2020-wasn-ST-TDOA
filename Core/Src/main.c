@@ -46,7 +46,7 @@ DMA_HandleTypeDef hdma_adc1;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
-
+uint16_t ADC_buffer[ADC_BUFFER_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -61,7 +61,14 @@ static void MX_TIM3_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+	int _write(int file, char *ptr, int len) {
+		/* Implement our write function. It is used for printf and puts */
+		int i = 0;
+		for (i = 0; i < len; ++i) {
+			ITM_SendChar((*ptr++));
+		}
+		return i;
+	} // write
 /* USER CODE END 0 */
 
 /**
@@ -87,7 +94,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  for (unsigned int i = 0; i < ADC_BUFFER_SIZE; ++i) { ADC_buffer[i] = 0; }
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -96,6 +103,15 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+
+  // Turn LED Green ON
+  	  HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 1);
+  	  HAL_GPIO_WritePin(GPIOD, LED_R_Pin, 0); // Turns ON on HAL_ERROR
+  // Turn LED Green OFF if any initialization fails
+  	  // Start timer
+  	   	  if (HAL_TIM_Base_Start(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 0); }
+  	  // Initialize ADC with DMA transfer
+  	  	  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, ADC_BUFFER_SIZE) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 0); }
 
   /* USER CODE END 2 */
 
@@ -106,6 +122,15 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  /**
+		for (int j = 0; j < 1000; ++j) {
+			for (int k = 0; k < 1000; ++k) {}
+		}
+		for (int i = 0; i < ADC_BUFFER_SIZE; ++i) {
+			printf("b[%d] = %d | ",i, ADC_buffer[i]);
+		}
+		printf("\n---------------------------------\n");
+		/**/
   }
   /* USER CODE END 3 */
 }
@@ -183,7 +208,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T3_TRGO;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.NbrOfConversion = 3;
-  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
@@ -239,9 +264,9 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 2;
+  htim3.Init.Prescaler = 2-1;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 50;
+  htim3.Init.Period = 50-1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -253,8 +278,8 @@ static void MX_TIM3_Init(void)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
@@ -307,7 +332,20 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+/**
+  * @brief  Regular conversion half DMA transfer callback in non blocking mode
+  * @param  hadc pointer to a ADC_HandleTypeDef structure that contains
+  *         the configuration information for the specified ADC.
+  * @retval None
+  */
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	HAL_GPIO_TogglePin(GPIOD, LED_O_Pin);
+}
 
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+	HAL_GPIO_TogglePin(GPIOD, LED_B_Pin);
+}
 /* USER CODE END 4 */
 
 /**
@@ -318,7 +356,8 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-
+	HAL_GPIO_WritePin(GPIOD, LED_R_Pin, 1);
+	while(1) {}
   /* USER CODE END Error_Handler_Debug */
 }
 
