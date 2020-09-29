@@ -33,7 +33,7 @@
 
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include <main.hpp>
+#include "main.hpp"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -63,8 +63,12 @@ DMA_HandleTypeDef hdma_adc1;
 
 TIM_HandleTypeDef htim3;
 
+UART_HandleTypeDef huart1;
+DMA_HandleTypeDef hdma_usart1_tx;
+
 /* USER CODE BEGIN PV */
 uint16_t ADC_buffer[ADC_BUFFER_SIZE];
+uint8_t UART_ReceivedChar = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -73,6 +77,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 /* Overwrite _write function from syscalls so we can use it to printf into Serial Wire Viewer (SWV) console */
 int _write(int file, char *ptr, int len) {
@@ -124,10 +129,11 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_ADC1_Init();
-  MX_TIM3_Init();
+	MX_GPIO_Init();
+	MX_DMA_Init();
+	MX_ADC1_Init();
+	MX_TIM3_Init();
+	MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   // Turn LED Green ON
@@ -138,7 +144,9 @@ int main(void)
   	   	  if (HAL_TIM_Base_Start(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
   	  // Initialize ADC with DMA transfer
   	  	  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, ADC_BUFFER_SIZE) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
-
+  	  // Tell UART to interrupt after receiving one char (8 bits)
+  	  // The received char is used for command processing
+  	  	HAL_UART_Receive_IT(&huart1, &UART_ReceivedChar, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -310,6 +318,39 @@ static void MX_TIM3_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_9B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_EVEN;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -322,6 +363,9 @@ static void MX_DMA_Init(void)
   /* DMA2_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+  /* DMA2_Stream7_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream7_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream7_IRQn);
 
 }
 
@@ -337,6 +381,7 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, LED_G_Pin|LED_O_Pin|LED_R_Pin|LED_B_Pin, GPIO_PIN_RESET);
@@ -351,6 +396,10 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+// Every time ADC_ConvCpltCallback is called it will increment this variable
+// Every time HAL_UART_TxCpltCallback is called it will decrement this variable
+// So if ADC+DMA is filling the buffer faster than the UART is transmitting it will grow.
+uint16_t ADC_UART_DIFF = 0;
 /**
   * @brief  Regular conversion half DMA transfer callback in non blocking mode
   * @param  hadc pointer to a ADC_HandleTypeDef structure that contains
@@ -360,10 +409,17 @@ static void MX_GPIO_Init(void)
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 {
 	HAL_GPIO_TogglePin(GPIOD, LED_O_Pin);
-}
+} // HAL_ADC_ConvHalfCpltCallback
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+	++ADC_UART_DIFF;
 	HAL_GPIO_TogglePin(GPIOD, LED_B_Pin);
+	// Tell UART to transmit one channel
+	// TODO: fix DMA memory access... Currently UART is accessing linearly (mixing ch1,2,3...)
+	/** Buffer holds ADC_BUFFER_SIZE/CHANNEL_COUNT samples per channel. Each sample is 16 bits
+	* UART transmits 8 bits. Thus Buffer holds (BUFFER_SIZE/CHANNEL*2) "items"
+	* To transmit 1/10 total items the "size" we tell UART_DMA is: BSIZE/CHANNEL*2/10 --> SIZE/COUNT/5 **/
+	HAL_UART_Transmit_DMA(&huart1, (uint8_t*)(&ADC_buffer), ADC_BUFFER_SIZE/CHANNEL_COUNT/5);
 #ifdef CH_PLOT
 	// Pause the sampling timer
 		if (HAL_TIM_Base_Stop(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 0); }
@@ -378,7 +434,33 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
   	  // Restart sampling timer
   	   	  if (HAL_TIM_Base_Start(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 0); }
 #endif // CH_PLOT
-}
+} // HAL_ADC_ConvCpltCallback
+
+/**
+  * @brief  Tx Transfer completed callbacks.
+  * @param  huart  Pointer to a UART_HandleTypeDef structure that contains
+  *                the configuration information for the specified UART module.
+  * @retval None
+  */
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+	--ADC_UART_DIFF;
+} // HAL_UART_TxCpltCallback
+
+/**
+  * @brief  Rx Transfer completed callbacks.
+  * @param  huart  Pointer to a UART_HandleTypeDef structure that contains
+  *                the configuration information for the specified UART module.
+  * @retval None
+  */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+	if (huart == &huart1) {
+		switch(UART_ReceivedChar) {
+		case 'e': // toggle error (red LED)
+			HAL_GPIO_TogglePin(GPIOD, LED_R_Pin); break;
+
+		} // switch UART_ReceivedChar
+	} // if huart1
+} //HAL_UART_RxCpltCallback
 /* USER CODE END 4 */
 
 /**
