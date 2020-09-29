@@ -73,11 +73,17 @@ void Error_Handler(void);
 #define LED_B_Pin GPIO_PIN_15
 #define LED_B_GPIO_Port GPIOD
 /* USER CODE BEGIN Private defines */
-/** ADC Buffer Size
- * Size in 16 bit sized samples. Therefore buffer size = 2 --> 32 bits = 4 bytes
-* 30720 samples = (*2) 61440 bytes and = (/3) 10240 samples per channel = (/40 kHz) 0,256 s recording (0,256s at 340 m/s = 87 m)
-* 46080 samples = (*2) 92160 bytes and = (/3) 15360 samples per channel = (/40 kHz) 0,384 s recording (0,256s at 340 m/s = 130 m) **/
-#define ADC_BUFFER_SIZE	60000
+/** ADC Buffer Size -- Number of samples the buffer can hold
+ * Each sample is 2 bytes (16 bit) in memory (but the ADC samples @ 12bit max. So we can use 4 bits per sample for parity checks)
+ *
+ * If buffer size = 30720 samples it will use (30720 samples * 2 bytes/sample) 61440 bytes and hold (30720/3) 10240 samples per channel
+ * |------> 10240 samples per channel @ 40 kSps represents a (256 ms) window of recording. In 256 ms sound @ 340 m/s travels 87 meters.
+ *
+ *  buffer size = 46080 samples ---> 92160 bytes in memory = 15360 samples per channel = 384 ms = 131 m
+ *  buffer size = 60000 samples ---> 120 kb in memory = 20k samples per channel = 500 ms = 170 m
+ *
+**/
+#define ADC_BUFFER_SIZE	30720 // Number of samples the buffer can hold
 #define CHANNEL_COUNT	3 // number of channels / microphones
 
 
