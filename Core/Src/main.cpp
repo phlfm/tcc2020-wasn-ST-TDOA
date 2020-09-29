@@ -1,3 +1,4 @@
+
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
@@ -26,19 +27,20 @@
  * user can monitor ch_plot for the sample buffer value and iCH for the index of the current value
  *
  **/
-//#define CH_PLOT 0 // comment line to disable buffer inspection
 #define CH_PLOT_STEP 20
 #define CH_WAIT_TIMER 1000
 #define CH_WAIT_UPDATE 10000
 
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include "main.h"
+#include <main.hpp>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-static uint16_t ch_plot = 0;
-static unsigned int iCH = 0;
+#ifdef CH_PLOT
+	static uint16_t ch_plot = 0;
+	static unsigned int iCH = 0;
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,19 +74,20 @@ static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
-
+/* Overwrite _write function from syscalls so we can use it to printf into Serial Wire Viewer (SWV) console */
+int _write(int file, char *ptr, int len) {
+	// Implement our write function. It is used for printf and puts
+	int i = 0;
+	for (i = 0; i < len; ++i) {
+		ITM_SendChar((*ptr++));
+	}
+	return i;
+} // write
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-	int _write(int file, char *ptr, int len) {
-		/* Implement our write function. It is used for printf and puts */
-		int i = 0;
-		for (i = 0; i < len; ++i) {
-			ITM_SendChar((*ptr++));
-		}
-		return i;
-	} // write
+
 /* USER CODE END 0 */
 
 /**
@@ -94,7 +97,7 @@ static void MX_TIM3_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+  //Microphone<int, float> meuMic();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -108,7 +111,6 @@ int main(void)
 
   /* Configure the system clock */
   SystemClock_Config();
-
   /* USER CODE BEGIN SysInit */
   // Limpa buffer
   	  for (unsigned int i = 0; i < ADC_BUFFER_SIZE; ++i) { ADC_buffer[i] = 0; }
@@ -129,13 +131,13 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // Turn LED Green ON
-  	  HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 1);
-  	  HAL_GPIO_WritePin(GPIOD, LED_R_Pin, 0); // Turns ON on HAL_ERROR
+  	  HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_SET);
+  	  HAL_GPIO_WritePin(GPIOD, LED_R_Pin, GPIO_PIN_RESET); // Turns ON on HAL_ERROR
   // Turn LED Green OFF if any initialization fails
   	  // Start timer
-  	   	  if (HAL_TIM_Base_Start(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 0); }
+  	   	  if (HAL_TIM_Base_Start(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
   	  // Initialize ADC with DMA transfer
-  	  	  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, ADC_BUFFER_SIZE) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 0); }
+  	  	  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, ADC_BUFFER_SIZE) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
 
   /* USER CODE END 2 */
 
@@ -383,13 +385,15 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
+extern "C" {
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-	HAL_GPIO_WritePin(GPIOD, LED_R_Pin, 1);
+	HAL_GPIO_WritePin(GPIOD, LED_R_Pin, GPIO_PIN_SET);
 	while(1) {}
   /* USER CODE END Error_Handler_Debug */
+}
 }
 
 #ifdef  USE_FULL_ASSERT

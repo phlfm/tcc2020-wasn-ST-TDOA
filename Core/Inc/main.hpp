@@ -24,12 +24,18 @@
 #define __MAIN_H
 
 #ifdef __cplusplus
+#include <microphone.hpp>
 extern "C" {
 #endif
+
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
 
+#ifdef __cplusplus
+void Error_Handler(void);
+}
+#endif
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -51,7 +57,7 @@ extern "C" {
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
-void Error_Handler(void);
+
 
 /* USER CODE BEGIN EFP */
 
@@ -72,11 +78,11 @@ void Error_Handler(void);
 * 30720 samples = (*2) 61440 bytes and = (/3) 10240 samples per channel = (/40 kHz) 0,256 s recording (0,256s at 340 m/s = 87 m)
 * 46080 samples = (*2) 92160 bytes and = (/3) 15360 samples per channel = (/40 kHz) 0,384 s recording (0,256s at 340 m/s = 130 m) **/
 #define ADC_BUFFER_SIZE	60000
+#define CHANNEL_COUNT	3 // number of channels / microphones
+
+
 /* USER CODE END Private defines */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* __MAIN_H */
 
