@@ -85,6 +85,7 @@ void Error_Handler(void);
 **/
 #define ADC_BUFFER_SIZE	30720 // Number of samples the buffer can hold
 #define CHANNEL_COUNT	3 // number of channels / microphones
+static char transmitBufferUSART = 0;
 
 
 /* USER CODE END Private defines */

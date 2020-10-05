@@ -34,6 +34,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.hpp"
+#include <string> // for strlen
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -69,6 +70,7 @@ DMA_HandleTypeDef hdma_usart1_tx;
 /* USER CODE BEGIN PV */
 uint16_t ADC_buffer[ADC_BUFFER_SIZE];
 uint8_t UART_ReceivedChar = 0;
+std::string msg("");
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -147,6 +149,9 @@ int main(void)
   	  // Tell UART to interrupt after receiving one char (8 bits)
   	  // The received char is used for command processing
   	  	HAL_UART_Receive_IT(&huart1, &UART_ReceivedChar, 1);
+
+		msg = "Program has been initialized!\n\r";
+		HAL_UART_Transmit(&huart1, (uint8_t*)msg.c_str(), msg.length(), 10);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -333,13 +338,14 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 1000000;//115200;
   huart1.Init.WordLength = UART_WORDLENGTH_9B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_EVEN;
   huart1.Init.Mode = UART_MODE_TX_RX;
   huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart1.pRxBuffPtr = &UART_ReceivedChar;
   if (HAL_UART_Init(&huart1) != HAL_OK)
   {
     Error_Handler();
@@ -399,7 +405,7 @@ static void MX_GPIO_Init(void)
 // Every time ADC_ConvCpltCallback is called it will increment this variable
 // Every time HAL_UART_TxCpltCallback is called it will decrement this variable
 // So if ADC+DMA is filling the buffer faster than the UART is transmitting it will grow.
-uint16_t ADC_UART_DIFF = 0;
+uint8_t ADC_UART_DIFF = 0;
 /**
   * @brief  Regular conversion half DMA transfer callback in non blocking mode
   * @param  hadc pointer to a ADC_HandleTypeDef structure that contains
@@ -408,18 +414,19 @@ uint16_t ADC_UART_DIFF = 0;
   */
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 {
-	HAL_GPIO_TogglePin(GPIOD, LED_O_Pin);
 } // HAL_ADC_ConvHalfCpltCallback
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-	++ADC_UART_DIFF;
-	HAL_GPIO_TogglePin(GPIOD, LED_B_Pin);
-	// Tell UART to transmit one channel
-	// TODO: fix DMA memory access... Currently UART is accessing linearly (mixing ch1,2,3...)
-	/** Buffer holds ADC_BUFFER_SIZE/CHANNEL_COUNT samples per channel. Each sample is 16 bits
-	* UART transmits 8 bits. Thus Buffer holds (BUFFER_SIZE/CHANNEL*2) "items"
-	* To transmit 1/10 total items the "size" we tell UART_DMA is: BSIZE/CHANNEL*2/10 --> SIZE/COUNT/5 **/
-	HAL_UART_Transmit_DMA(&huart1, (uint8_t*)(&ADC_buffer), ADC_BUFFER_SIZE/CHANNEL_COUNT/5);
+	if (transmitBufferUSART) {
+		++ADC_UART_DIFF;
+		// Tell UART to transmit one channel
+		// TODO: fix DMA memory access... Currently UART is accessing linearly (mixing ch1,2,3...)
+		/** Buffer holds ADC_BUFFER_SIZE/CHANNEL_COUNT samples per channel. Each sample is 16 bits
+		* UART transmits 8 bits. Thus Buffer holds (BUFFER_SIZE/CHANNEL*2) "items"
+		* To transmit 1/10 total items the "size" we tell UART_DMA is: BSIZE/CHANNEL*2/10 --> SIZE/COUNT/5 **/
+		HAL_UART_Transmit_DMA(&huart1, (uint8_t*)(&ADC_buffer), ADC_BUFFER_SIZE/3);
+	} // if transmitBufferUSART
+	HAL_GPIO_TogglePin(GPIOD, LED_O_Pin);
 #ifdef CH_PLOT
 	// Pause the sampling timer
 		if (HAL_TIM_Base_Stop(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, 0); }
@@ -437,13 +444,35 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 } // HAL_ADC_ConvCpltCallback
 
 /**
+  * @brief  Tx HALF Transfer completed callbacks.
+  * @param  huart  Pointer to a UART_HandleTypeDef structure that contains
+  *                the configuration information for the specified UART module.
+  * @retval None
+  */
+void HAL_UART_TxHalfCpltCallback(UART_HandleTypeDef *huart) {
+	// This function is only called by DMA UART transfer.
+	if (huart == &huart1) {
+		if (transmitBufferUSART) {
+			--ADC_UART_DIFF;
+		} // if transmitBufferUSART
+	}
+} // HAL_UART_TxHalfCpltCallback
+/**
   * @brief  Tx Transfer completed callbacks.
   * @param  huart  Pointer to a UART_HandleTypeDef structure that contains
   *                the configuration information for the specified UART module.
   * @retval None
   */
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-	--ADC_UART_DIFF;
+	// Called on all UART_TX_IT or _DMA
+
+	if (huart == &huart1) {
+		HAL_GPIO_TogglePin(GPIOD, LED_B_Pin);
+		msg = "$_TX COMPLETE_$_";
+		msg += (ADC_UART_DIFF + 48);
+		msg += "_$\r\n";
+		HAL_UART_Transmit(&huart1, (uint8_t*)msg.c_str(), msg.length(), 10);
+	} // if huart1
 } // HAL_UART_TxCpltCallback
 
 /**
@@ -456,9 +485,19 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	if (huart == &huart1) {
 		switch(UART_ReceivedChar) {
 		case 'e': // toggle error (red LED)
-			HAL_GPIO_TogglePin(GPIOD, LED_R_Pin); break;
+			HAL_GPIO_TogglePin(GPIOD, LED_R_Pin);
+			break;
+		case 'p': // print message
+			msg = "User pressed p!\n\r";
+			HAL_UART_Transmit_IT(&huart1, (uint8_t*)msg.c_str(), msg.length());
+			break;
+		case 's': // print samples
+			transmitBufferUSART = !transmitBufferUSART; break;
 
 		} // switch UART_ReceivedChar
+		HAL_UART_Transmit(&huart1, &UART_ReceivedChar, 1, 10);
+		/** UART_Receive_IT only works once and needs to be "set" everytime we get a RxCpltCallback **/
+		HAL_UART_Receive_IT(&huart1, &UART_ReceivedChar, 1);
 	} // if huart1
 } //HAL_UART_RxCpltCallback
 /* USER CODE END 4 */
