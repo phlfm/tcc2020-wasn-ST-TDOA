@@ -214,17 +214,20 @@ inline ReturnCode Foy(
 		inline void calculateTDOA_maxThreshold(MatrixBase<N_by_N> &TDOAs, sampleType const (&sampleBuffer)[sampleBufferSize],
 		sfType const &samplingFrequency, MatrixBase<ONE_by_N> &samplesAtTOA, sampleType const &threshold) {
 		// initialize samplesAtTOA to threshold. A sample is only valid if it is BIGGER than threshold
-			samplesAtTOA.fill(threshold);
 			static Eigen::Matrix<sampleType,1,N> TOA_line;
+			unsigned char TOA_found = 0;
+			samplesAtTOA.fill(threshold);
 		// iterate through buffer
 			uint chIndex = 0; // index for accesing each channels TOA_line, TDOA, samplesAtTOA
 			for (uint i = 0; i < sampleBufferSize; ++i) {
 				chIndex = i % N; // will refer to channel 0, 1, 2, ... N-1, 0, 1, 2, ..., N-1, ...
 			// if sample > TOA[channel] --> get new sample value and index
-				if (sampleBuffer[i] > samplesAtTOA[chIndex]) {
+				if (sampleBuffer[i] > samplesAtTOA[chIndex] && !(TOA_found & chIndex)) {
 					samplesAtTOA[chIndex] = sampleBuffer[i];
 					TOA_line[chIndex] = (i-chIndex)/N;
+					TOA_found = TOA_found | (1<<chIndex);
 				}
+				if (TOA_found == (1<<N)-1) { break; }
 			} // iterate through buffer
 			//cout << "Max index at TOA_line = \n" << TOA_line << "\n";
 			TDOAs.colwise() = TOA_line.transpose().template cast<TDOAsType>(); // makes TDOA = [TOA0 TOA0 TOA0][TOA1 TOA1 TOA1][TOA2 TOA2 TOA2]

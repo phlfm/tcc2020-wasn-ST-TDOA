@@ -28,7 +28,7 @@
     TDOA::ReturnCode foyResult;
     uint refSensor = 0;
 
-    uint16_t threshold = 3072;
+    uint16_t threshold = 3584; // = 2048 + 2048*0.75;
 
 
 #ifdef DEBUG_SWV
@@ -89,7 +89,7 @@ int main(void)
   	  // The received char is used for command processing
   	  	HAL_UART_Receive_IT(&huart1, &UART_ReceivedChar, 1);
 
-		msg = "Program has been initialized! 2020.10.12.0101\n\r";
+		msg = "Program has been initialized! 2020.10.12.0150\n\r";
 		HAL_UART_Transmit(&huart1, (uint8_t*)msg.c_str(), msg.length(), 10);
 
   while (1)
@@ -141,13 +141,13 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	  msg += "\n\r";
 
 	// Call Foys method
-	  estimate << -0.133f, 0.666f;
+	  estimate[0] = -0.133f; estimate[1] = 0.666f;
 	  foyResult = TDOA::withEigen::Foy<CHANNEL_COUNT, SPACE_DIMENSIONS>(
 		  sensorPositionsMatrix, // position of each sensor
 		  TDOAs,      // TDOA of every sensor
 		  estimate,   // IN/OUT: initial guess / final result
 		  340.5f,     // speed of signal
-		  1e-3f,      // maxError
+		  1e-4f,      // maxError
 		  iterationError, // OUT: error of last iteration
 		  iterationCount, // OUT: number of iterations
 		  20,     // max iteration count
