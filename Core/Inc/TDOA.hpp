@@ -236,6 +236,9 @@ inline ReturnCode Foy(
 			return;
 			/**/
 		} //calculateTDOA_maxThreshold
+
+		//template <uint CHANNEL_COUNT, uint CHANNEL_BUFFER_SIZE, typename sampleType, char SAMPLE_BITS, typename fixedPoint, char FIXEDPOINT_BITS>
+		//inline void calculateGCC_ARM(sampleType *buffer, fixedPoint channel_buffer[CHANNEL_BUFFER_SIZE])
     } // namespace withEigen
 } // namespace TDOA
 

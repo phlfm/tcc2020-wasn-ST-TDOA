@@ -1,6 +1,20 @@
-
 #include "main.hpp"
 #include <string>
+
+/* Include ARM DSP Library
+ *
+ * Add "arm_math.h" into ../Core/Inc
+ * 	Check if ../Core/Inc is in the INCLUDE path
+ *
+ * Add "libarm_cortexM4lf_math.a into ../libs
+ * 	Cortex-M4 Little-endian Floating-point-unit --> M4lf
+ * 	Add ../libs into the LIBRARY paths
+ * 	Add "arm_cortexM4lf_math" to libs. (Without extension and without the "lib" prefix)
+ *
+ * define ARM_MATH_CM4 for CortexM4
+ */
+#define ARM_MATH_CM4
+#include "arm_math.h"
 
 // Periferial Handles
 	ADC_HandleTypeDef hadc1;
@@ -28,7 +42,7 @@
     TDOA::ReturnCode foyResult;
     uint refSensor = 0;
 
-    uint16_t threshold = 3584; // = 2048 + 2048*0.75;
+
 
 
 #ifdef DEBUG_SWV
@@ -54,8 +68,6 @@ int main(void)
   HAL_Init();
   SystemClock_Config();
 
-// Limpa buffer
-  for (unsigned int i = 0; i < ADC_BUFFER_SIZE; ++i) { ADC_buffer[i] = 0; }
 
   // Liga prefetch quando disponivel
   	  /* STM32F405x/407x/415x/417x Revision Z devices: prefetch is supported  */
@@ -73,7 +85,7 @@ int main(void)
 	MX_USART1_UART_Init();
 
   // Configure sensor positions
-	sensorPositionsMatrix <<	-1.4f,	-1.5f,	// X1 Y1
+	sensorPositionsMatrix <<	-1.6f,	-1.5f,	// X1 Y1
 								3.0f,	0.0f,	// X2 Y2
 								-2.0f,	3.5f;	// X3 Y3
 
@@ -133,8 +145,15 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	  if (HAL_TIM_Base_Stop(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
 
 	// Calculate TDOAs
+	  /** Using threshold **
 	  TDOA::withEigen::calculateTDOA_maxThreshold<CHANNEL_COUNT, ADC_BUFFER_SIZE, uint16_t, uint16_t, float>
 		(TDOAs, ADC_buffer,samplingFrequency, samplesAtTOA, threshold);
+	  /**/
+
+	  // Separate the interleaved buffer of uint16 samples into an channel-individual Q15 buffer.
+	  for (uint16_t sample = 0; sample < ADC_BUFFER_SIZE; ++sample) {
+	  }
+
 
 	  msg = "TDOAs: ";// Foys method doesn't clear msg before so user can add prefix message
 	  for (int p = 0; p < TDOAs.size(); ++p) { msg += std::to_string(TDOAs(p)) + " ";}
