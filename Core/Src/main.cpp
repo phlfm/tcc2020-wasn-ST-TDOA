@@ -28,7 +28,8 @@
 
 constexpr int correlateResultLen = (ADC_BUFFER_SIZE/CHANNEL_COUNT)*2-1;
 // Sample buffer
-	uint16_t ADC_buffer[ADC_BUFFER_SIZE]; // holds interleaved samples
+#include "ADC_BUFF.hpp" // Loads ADC_buffer with samples / test GCC
+//	uint16_t ADC_buffer[ADC_BUFFER_SIZE]; // holds interleaved samples
 	q15_t channel_buffer[ADC_BUFFER_SIZE]; // NON interleaved Q15 samples
 	q15_t correlateResult[correlateResultLen];
 // memoria total = buffer_size*2(1+1/channelcount)
@@ -101,10 +102,14 @@ int main(void)
   	  // Start timer
   	   	  if (HAL_TIM_Base_Start(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
   	  // Initialize ADC with DMA transfer
-  	  	  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, ADC_BUFFER_SIZE) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
+  	  	  //if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, ADC_BUFFER_SIZE) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
+  	  	  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, CHANNEL_COUNT) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); } // to test GCC
   	  // Tell UART to interrupt after receiving one char (8 bits)
   	  // The received char is used for command processing
   	  	HAL_UART_Receive_IT(&huart1, &UART_ReceivedChar, 1);
+
+  	  	// call convcpltcallback to test GCC
+  	  	HAL_ADC_ConvCpltCallback(&hadc1); // test GCC
 
 		msg = "Program has been initialized! 2020.10.12.0150\n\r";
 		HAL_UART_Transmit(&huart1, (uint8_t*)msg.c_str(), msg.length(), 10);
