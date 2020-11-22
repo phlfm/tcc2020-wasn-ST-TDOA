@@ -32,7 +32,7 @@
 // Valor para determinar se teve overflow da correlacao.
 #define correlateOverflowValue 32767 // Para q15 o valor maximo guardável é 2^15-1 = 32767
 
-
+#define correcaoAmostraQ15 2048 // Se a amostra tiver N bits, usar 2^(N-1)
 
 
 

@@ -13,7 +13,6 @@
  *
  * define ARM_MATH_CM4 for CortexM4
  */
-#define TWO_ELEVADO_15 32768
 #define ARM_MATH_CM4
 //#define __FPU_PRESENT 1
 #include "arm_math.h"
@@ -29,8 +28,7 @@
 constexpr int correlateResultLen = (ADC_BUFFER_SIZE/CHANNEL_COUNT)*2-1;
 
 // Sample buffer
-#include "ADC_BUFF.hpp" // Loads ADC_buffer with samples / test GCC
-//	uint16_t ADC_buffer[ADC_BUFFER_SIZE]; // holds interleaved samples
+	uint16_t ADC_buffer[ADC_BUFFER_SIZE]; // holds interleaved samples
 	q15_t channel_buffer[ADC_BUFFER_SIZE]; // NON interleaved Q15 samples
 	q15_t correlateResult[correlateResultLen];
 // memoria total = buffer_size*2(1+1/channelcount)
@@ -103,16 +101,13 @@ int main(void)
   	  // Start timer
   	   	  if (HAL_TIM_Base_Start(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
   	  // Initialize ADC with DMA transfer
-  	  	  //if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, ADC_BUFFER_SIZE) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
-  	  	  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, CHANNEL_COUNT) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); } // to test GCC
+  	  	  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_buffer, ADC_BUFFER_SIZE) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
+
   	  // Tell UART to interrupt after receiving one char (8 bits)
   	  // The received char is used for command processing
   	  	HAL_UART_Receive_IT(&huart1, &UART_ReceivedChar, 1);
 
-  	  	// call convcpltcallback to test GCC
-  	  	HAL_ADC_ConvCpltCallback(&hadc1); // test GCC
-
-		msg = "Program has been initialized! 2020.10.12.0150\n\r";
+		msg = "Program has been initialized! 2020.11.22.2029\n\r";
 		HAL_UART_Transmit(&huart1, (uint8_t*)msg.c_str(), msg.length(), 10);
 
   while (1)
@@ -174,12 +169,16 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	int16_t tmp = 0;
 
 	for (uint16_t sample = 0; sample < ADC_BUFFER_SIZE; ++sample) {
-		// amostra tem 12 bits e estamos trabalhando com 16, então left-shift (16-12) para ficar em 16 bits.
-			//tmp = (int16_t)(ADC_buffer[sample]<<4); // test GCC
-			tmp = (int16_t)(ADC_buffer[sample]);
+		/** amostra tem 12 bits e estamos trabalhando com 16, então left-shift (16-12) para ficar em 16 bits.
+		 *  PORÉM isso corre serio risco de levar a correlacao a overflow. Entao deixamos em 12 bits
+		 *  Se estivesse em 16 bits, para calcular Q15 a gente subtrairia (2^16/2 = 2^15)
+		 *  Mas Se formos manter as amostras em 12 bits nao deve ocorrer overflow (testado com dados do simulador)
+		 *  Mas para converter para Q15 devemos subtrair 2^12/2 = 2^11
+		 */
+			tmp = (int16_t)(ADC_buffer[sample]-correcaoAmostraQ15);
 
 		// subtrai 2^16/2 para virar Q15
-			channel_buffer[channelPointer[channel]] = (q15_t)(tmp - TWO_ELEVADO_15)/8;
+			channel_buffer[channelPointer[channel]] = (q15_t)(tmp);
 
 		// Corrige o channelPointer
 			++channelPointer[channel];
