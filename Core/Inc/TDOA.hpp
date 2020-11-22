@@ -174,7 +174,7 @@ inline ReturnCode Foy(
 
 			// Check if convergence is failing
 				iterationError = currentError.norm();
-				if (!(iterationError==iterationError) || iterationError > 100) {
+				if (!(iterationError==iterationError) || iterationError > 100.0f) {
 					return err_itErrorNonConvergence;
 				} // if iterationError > 100
 
@@ -213,10 +213,14 @@ inline ReturnCode Foy(
 		template <uint N, uint sampleBufferSize, typename sampleType, typename sfType, typename TDOAsType, typename N_by_N, typename ONE_by_N>
 		inline void calculateTDOA_maxThreshold(MatrixBase<N_by_N> &TDOAs, sampleType const (&sampleBuffer)[sampleBufferSize],
 		sfType const &samplingFrequency, MatrixBase<ONE_by_N> &samplesAtTOA, sampleType const &threshold) {
+
+
 		// initialize samplesAtTOA to threshold. A sample is only valid if it is BIGGER than threshold
 			static Eigen::Matrix<sampleType,1,N> TOA_line;
 			unsigned char TOA_found = 0;
 			samplesAtTOA.fill(threshold);
+
+
 		// iterate through buffer
 			uint chIndex = 0; // index for accesing each channels TOA_line, TDOA, samplesAtTOA
 			for (uint i = 0; i < sampleBufferSize; ++i) {
@@ -229,6 +233,8 @@ inline ReturnCode Foy(
 				}
 				if (TOA_found == (1<<N)-1) { break; }
 			} // iterate through buffer
+
+
 			//cout << "Max index at TOA_line = \n" << TOA_line << "\n";
 			TDOAs.colwise() = TOA_line.transpose().template cast<TDOAsType>(); // makes TDOA = [TOA0 TOA0 TOA0][TOA1 TOA1 TOA1][TOA2 TOA2 TOA2]
 			TDOAs.noalias() = TDOAs.rowwise() - TOA_line.template cast<TDOAsType>(); // makes TDOA = [TOA0-0 TOA0-1 TOA0-2][TOA1-0 TOA1-1 TOA1-2][TOA2-0 TOA2-1 TOA2-2]

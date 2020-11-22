@@ -13,8 +13,11 @@
  *
  * define ARM_MATH_CM4 for CortexM4
  */
+#define TWO_ELEVADO_15 32768
 #define ARM_MATH_CM4
+//#define __FPU_PRESENT 1
 #include "arm_math.h"
+
 
 // Periferial Handles
 	ADC_HandleTypeDef hadc1;
@@ -23,10 +26,12 @@
 	UART_HandleTypeDef huart1;
 	DMA_HandleTypeDef hdma_usart1_tx;
 
-
+constexpr int correlateResultLen = (ADC_BUFFER_SIZE/CHANNEL_COUNT)*2-1;
 // Sample buffer
 	uint16_t ADC_buffer[ADC_BUFFER_SIZE]; // holds interleaved samples
-
+	q15_t channel_buffer[ADC_BUFFER_SIZE]; // NON interleaved Q15 samples
+	q15_t correlateResult[correlateResultLen];
+// memoria total = buffer_size*2(1+1/channelcount)
 // buffers for sending and receiving serial data
 	uint8_t UART_ReceivedChar = 0;
 	std::string msg("");
@@ -85,9 +90,9 @@ int main(void)
 	MX_USART1_UART_Init();
 
   // Configure sensor positions
-	sensorPositionsMatrix <<	-1.6f,	-1.5f,	// X1 Y1
+	sensorPositionsMatrix <<	-1.6f,	-1.0f,	// X1 Y1
 								3.0f,	0.0f,	// X2 Y2
-								-2.0f,	3.5f;	// X3 Y3
+								-1.8f,	3.0f;	// X3 Y3
 
   // Turn LED Green ON
   	  HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_SET);
@@ -150,11 +155,90 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 		(TDOAs, ADC_buffer,samplingFrequency, samplesAtTOA, threshold);
 	  /**/
 
-	  // Separate the interleaved buffer of uint16 samples into an channel-individual Q15 buffer.
-	  for (uint16_t sample = 0; sample < ADC_BUFFER_SIZE; ++sample) {
-	  }
+	// Separar o vetor de amostras intercaladas uint16 em N vetores Q15, um para cada canal
+{ // escopo "des-intercalar" amostras
+		// channelPointer aponta para onde a Nésima amostra de cada canal deve ir
+			uint16_t channelPointer[CHANNEL_COUNT];
+			for (uint8_t i = 0; i < CHANNEL_COUNT; ++i) { channelPointer[i] = i*(ADC_BUFFER_SIZE/CHANNEL_COUNT); }
+			// channelPointer aponta para 0-7999, 8000-15999, 16000-23999
 
+	  // Guarda qual canal estamos acessando na amostra "sample"
+			uint8_t channel = 0;
 
+	int16_t tmp = 0;
+
+	for (uint16_t sample = 0; sample < ADC_BUFFER_SIZE; ++sample) {
+		// amostra tem 12 bits e estamos trabalhando com 16, então left-shift (16-12) para ficar em 16 bits.
+			tmp = (int16_t)(ADC_buffer[sample]<<(4));
+
+		// subtrai 2^16/2 para virar Q15
+			channel_buffer[channelPointer[channel]] = (q15_t)(tmp - TWO_ELEVADO_15);
+
+		// Corrige o channelPointer
+			++channelPointer[channel];
+
+		// Incrementa channel e verifica se já "deu a volta"
+			if (++channel >= CHANNEL_COUNT) { channel = 0; }
+	}
+} // escopo "des-intercalar" amostras
+{ // escopo "calcular TDOAs por GCC"
+	// Calcular TDOAs por correlação cruzada
+		/** Apos "des-intercalar" as amostras, os dados de ADC_buffer podem ser "jogados fora"
+		 * (ou usados de scratch space na função de correlação)
+		 *
+		 * pScratch tem que ter tamanho 8000+2*8000-2  = 24000 -2 --> ADC_buffer tem o tamanho ideal
+		 *
+		 * pDst tem que ter tamanho 2*8000 -1
+		 **/
+	// Declara e inicializa argmaxCorr e maxCorr igual a zero.
+	int16_t argmaxCorr[CHANNEL_COUNT][CHANNEL_COUNT];
+	q15_t maxCorr[CHANNEL_COUNT][CHANNEL_COUNT];
+	for (uint8_t chA = 0; chA < CHANNEL_COUNT; ++chA) {
+		for (uint8_t chB = 0; chB < CHANNEL_COUNT; ++chB) {
+			argmaxCorr[chA][chB] = 0;
+			maxCorr[chA][chB] = 0;
+		}
+	}
+
+	for (uint8_t chA = 0; chA < CHANNEL_COUNT; ++chA) {
+		for (uint8_t chB = 0; chB < CHANNEL_COUNT; ++chB) {
+			// Pular correlação de canais iguais e comutados pois corr(AB) == corr(BA) e corr(AA) é irrelevante
+				if (chA >= chB) { continue; }
+
+			// Calcula correlação corr(A, B) em correlateResult (usando ADC_buffer como scratch buffer)
+				arm_correlate_opt_q15(
+						&channel_buffer[chA*(ADC_BUFFER_SIZE/CHANNEL_COUNT)], 	// local de A
+						ADC_BUFFER_SIZE/CHANNEL_COUNT, 							// comprimento de A
+						&channel_buffer[chB*(ADC_BUFFER_SIZE/CHANNEL_COUNT)], 	// local de B
+						ADC_BUFFER_SIZE/CHANNEL_COUNT, 							// comprimento de B
+						correlateResult, 										// resultado
+						reinterpret_cast<q15_t*>(ADC_buffer));					// scratch buffer
+
+			// Varre o resultado buscando a maior correlação
+				for (int16_t argumento = 0; argumento < correlateResultLen; ++argumento) {
+					if (correlateResult[argumento] > maxCorr[chA][chB]) {
+						maxCorr[chA][chB] = correlateResult[argumento];
+						argmaxCorr[chA][chB] = argumento;
+					}
+				} // for argmax
+
+			// Comutativo
+				maxCorr[chB][chA] = maxCorr[chA][chB];
+				argmaxCorr[chB][chA] = -argmaxCorr[chA][chB]; // inverso!
+
+			// Encontra maior amostra correlata (argmax(corr))
+		} // iterate channel B
+	} // iterate channel A
+
+	// Calcular TDOAs a partir dos argmaxCorr
+	for (uint8_t chA = 0; chA < CHANNEL_COUNT; ++chA) {
+		for (uint8_t chB = 0; chB < CHANNEL_COUNT; ++chB) {
+			TDOAs(chA,chB) = -static_cast<float>( argmaxCorr[chA][chB] - (correlateResultLen >> 1) ) / static_cast<float>(samplingFrequency);
+		}
+	}
+
+} // escopo "calcular TDOAs por GCC"
+	// Rodar o método de Foy
 	  msg = "TDOAs: ";// Foys method doesn't clear msg before so user can add prefix message
 	  for (int p = 0; p < TDOAs.size(); ++p) { msg += std::to_string(TDOAs(p)) + " ";}
 	  msg += "\n\r";
