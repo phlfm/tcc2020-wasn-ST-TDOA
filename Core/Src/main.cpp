@@ -27,6 +27,7 @@
 	DMA_HandleTypeDef hdma_usart1_tx;
 
 constexpr int correlateResultLen = (ADC_BUFFER_SIZE/CHANNEL_COUNT)*2-1;
+
 // Sample buffer
 #include "ADC_BUFF.hpp" // Loads ADC_buffer with samples / test GCC
 //	uint16_t ADC_buffer[ADC_BUFFER_SIZE]; // holds interleaved samples
@@ -174,10 +175,11 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 
 	for (uint16_t sample = 0; sample < ADC_BUFFER_SIZE; ++sample) {
 		// amostra tem 12 bits e estamos trabalhando com 16, então left-shift (16-12) para ficar em 16 bits.
-			tmp = (int16_t)(ADC_buffer[sample]<<(4));
+			//tmp = (int16_t)(ADC_buffer[sample]<<4); // test GCC
+			tmp = (int16_t)(ADC_buffer[sample]);
 
 		// subtrai 2^16/2 para virar Q15
-			channel_buffer[channelPointer[channel]] = (q15_t)(tmp - TWO_ELEVADO_15);
+			channel_buffer[channelPointer[channel]] = (q15_t)(tmp - TWO_ELEVADO_15)/8;
 
 		// Corrige o channelPointer
 			++channelPointer[channel];
@@ -186,6 +188,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 			if (++channel >= CHANNEL_COUNT) { channel = 0; }
 	}
 } // escopo "des-intercalar" amostras
+
+uint8_t overflowCorrelacao = 0; // eh incrementado toda vez que for detectado um overflow da correlacao
 { // escopo "calcular TDOAs por GCC"
 	// Calcular TDOAs por correlação cruzada
 		/** Apos "des-intercalar" as amostras, os dados de ADC_buffer podem ser "jogados fora"
@@ -207,7 +211,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 
 	for (uint8_t chA = 0; chA < CHANNEL_COUNT; ++chA) {
 		for (uint8_t chB = 0; chB < CHANNEL_COUNT; ++chB) {
-			// Pular correlação de canais iguais e comutados pois corr(AB) == corr(BA) e corr(AA) é irrelevante
+			// Pular correlação de canais iguais e simétricos pois corr(AB) == corr(-BA) e corr(AA) é irrelevante
 				if (chA >= chB) { continue; }
 
 			// Calcula correlação corr(A, B) em correlateResult (usando ADC_buffer como scratch buffer)
@@ -227,9 +231,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 					}
 				} // for argmax
 
-			// Comutativo
+			// Correlação eh """comutativa""", entao agora a gente calcula corr(BA) com base em corr(AB)
 				maxCorr[chB][chA] = maxCorr[chA][chB];
-				argmaxCorr[chB][chA] = -argmaxCorr[chA][chB]; // inverso!
+				argmaxCorr[chB][chA] = correlateResultLen-argmaxCorr[chA][chB]; // inverso!
+
+			// Verificacao de overflow na correlacao
+				if (maxCorr[chA][chB] >= correlateOverflowValue) { ++overflowCorrelacao; }
 
 			// Encontra maior amostra correlata (argmax(corr))
 		} // iterate channel B
@@ -240,13 +247,18 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 		for (uint8_t chB = 0; chB < CHANNEL_COUNT; ++chB) {
 			TDOAs(chA,chB) = -static_cast<float>( argmaxCorr[chA][chB] - (correlateResultLen >> 1) ) / static_cast<float>(samplingFrequency);
 		}
+		TDOAs(chA,chA) = 0.0f;
 	}
+	TDOAs(0,0) = 0.0f;
 
 } // escopo "calcular TDOAs por GCC"
 	// Rodar o método de Foy
 	  msg = "TDOAs: ";// Foys method doesn't clear msg before so user can add prefix message
-	  for (int p = 0; p < TDOAs.size(); ++p) { msg += std::to_string(TDOAs(p)) + " ";}
+	  for (int p = 0; p < TDOAs.size(); ++p) {
+		  msg += std::to_string(TDOAs(p)) + " ";}
 	  msg += "\n\r";
+
+	  if (overflowCorrelacao > 0) { msg += "WARNING: detectado overflow da correlacao!!!\n\r"; }
 
 	// Call Foys method
 	  estimate[0] = -0.133f; estimate[1] = 0.666f;

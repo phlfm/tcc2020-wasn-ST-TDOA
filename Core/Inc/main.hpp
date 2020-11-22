@@ -23,9 +23,14 @@
  * 	12000			4			60	kb			075 ms			25 m
  *
  */
+/* ATENÇÃO: quanto maior o buffer size, mais demorado a correlação além de ficar MAIOR.
+ * Se a correlação for muito grande corre risco de overflow e então todo valor da correlação vai ser 2^15-1 = 32767*/
 #define ADC_BUFFER_SIZE	18000 // Number of samples the buffer can hold
 #define CHANNEL_COUNT	3 // number of channels / microphones
 #define SPACE_DIMENSIONS 2
+
+// Valor para determinar se teve overflow da correlacao.
+#define correlateOverflowValue 32767 // Para q15 o valor maximo guardável é 2^15-1 = 32767
 
 
 
