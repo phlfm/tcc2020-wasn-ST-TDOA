@@ -132,7 +132,8 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-	HAL_GPIO_TogglePin(GPIOD, LED_O_Pin);
+	HAL_GPIO_WritePin(GPIOD, LED_O_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOD, LED_B_Pin, GPIO_PIN_RESET);
 #ifdef CH_PLOT
 	// Pause the sampling timer
 		if (HAL_TIM_Base_Stop(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
@@ -276,7 +277,7 @@ uint8_t overflowCorrelacao = 0; // eh incrementado toda vez que for detectado um
 
 	// Transmit msg (Foy output) via Serial
 	  HAL_UART_Transmit_IT(&huart1, (uint8_t*)msg.c_str(), msg.length());
-
+	  HAL_GPIO_WritePin(GPIOD, LED_O_Pin, GPIO_PIN_RESET);
 } // HAL_ADC_ConvCpltCallback
 
 /**
@@ -305,6 +306,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 	if (huart == &huart1) {
 		// Restart sampling timer
 		  if (HAL_TIM_Base_Start(&htim3) != HAL_OK) { HAL_GPIO_WritePin(GPIOD, LED_G_Pin, GPIO_PIN_RESET); }
+		  HAL_GPIO_WritePin(GPIOD, LED_B_Pin, GPIO_PIN_SET);
 	} // if huart1
 } // HAL_UART_TxCpltCallback
 /**/
