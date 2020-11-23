@@ -8,7 +8,6 @@ Debug/
 
 # Libraries
 *.lib
-*.a
 *.la
 *.lo
 
@@ -32,10 +31,7 @@ Debug/
 *.png
 
 # Eclipse CDT project files
-.cproject
-.project
 .settings/
-.mxproject
 
 # Vagrant directory
 .vagrant/
